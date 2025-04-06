@@ -1,10 +1,3 @@
-
-//  1. População
-//  2. Fitness
-//  3. Crossover
-//  4. Mutação
-//  5. Verificar e repete
-
 class City {
     x: number;
     y: number;
@@ -20,213 +13,145 @@ class City {
 class Truck {
     name: string;
     city: City[];
-    
+
     constructor(path: City[], name: string) {
         this.city = path;
         this.name = name;
-        
     }
 }
 
 class SolutionTable {
     trucks: Truck[];
     constructor(trucks: Truck[]) {
-        this.trucks = trucks
-    }
-}
-
-
-
-const prettyPrinter = () => {
-    return (solutionClass: Solution, propertyKey: string, descriptor: PropertyDescriptor) => {
-        console.log(solutionClass.population);
+        this.trucks = trucks;
     }
 }
 
 class Solution {
     bestSolution: number = Infinity;
-    baseGraph = new City(8, 8, "X")
-    graph: City[]  = [
-        // new City(8, 8, "X"),
-        new City(2, 3, "A"),
-        new City(5, 7, "B"),
-        new City(8, 4, "C"),
-        new City(3, 9, "D"),
-    ]
-
-    maxAttempts: number = 10000;
-    bestPath: any;
-    population: SolutionTable[] = [
-        new SolutionTable([new Truck([this.baseGraph, ...this.graph, this.baseGraph], "TruckA")]),
-        new SolutionTable([new Truck([this.baseGraph, ...this.graph, this.baseGraph], "TruckB")]),
-        new SolutionTable([new Truck([this.baseGraph, ...this.graph, this.baseGraph], "TruckC")]),
-        new SolutionTable([new Truck([this.baseGraph, ...this.graph, this.baseGraph], "TruckD")]),
+    baseGraph = new City(30, 30, "Deposito");
+    graph: City[] = [
+        new City(5, 10, "1"), new City(15, 25, "2"), new City(30, 5, "3"),
+        new City(40, 20, "4"), new City(20, 40, "5"), new City(35, 35, "6"),
+        new City(10, 30, "7"), new City(50, 45, "8"), new City(45, 10, "9"),
+        new City(60, 30, "10"), new City(25, 15, "11"), new City(55, 20, "12"),
+        new City(70, 10, "13"), new City(80, 25, "14"), new City(65, 40, "15"),
+        new City(90, 30, "16"), new City(75, 50, "17"), new City(85, 15, "18"),
+        new City(95, 35, "19"), new City(40, 50, "20"), new City(10, 5, "21"),
+        new City(20, 25, "22"), new City(35, 10, "23"), new City(50, 15, "24"),
+        new City(60, 5, "25"), new City(70, 20, "26"), new City(30, 50, "27"),
+        new City(45, 25, "28"), new City(55, 35, "29"), new City(65, 15, "30")
     ];
 
+    numTrucks: number = 3;
+    citiesToVisit: number = 15;
+    maxCitiesPerTruck: number = 5;
+    maxAttempts: number = 1000;
+    bestPath: SolutionTable | null = null;
+    population: SolutionTable[] = [];
+
+    constructor() {
+        for (let i = 0; i < 10; i++) {
+            const shuffled = this._shuffle(this.graph);
+            const trucks = this._splitCitiesAmongTrucks(shuffled);
+            this.population.push(new SolutionTable(trucks));
+        }
+    }
 
     execute() {
-        for(let i = 0; i < this.maxAttempts; i++) {
+        for (let i = 0; i < this.maxAttempts; i++) {
             const [father, mother] = this.fitness();
             this.crossover(father, mother);
             this.mutate();
-            
         }
-        console.log('Best solution: ', this.bestSolution);
-        console.log('Best path: ', this.bestPath);
-    }
-    
-    @prettyPrinter()
-    fitness() {
-        let firstBest = 0;
-        let secondBest = 0;
-        let set = new Set();
-        for(let i = 0; i < this.population.length; i++) {
-            for(let j = 0; j < this.population[i].trucks.length; j++) {
-                let pathSum = 0;
-                for (let k = 0; k < this.population[i].trucks[j].city.length; k++) {
-                    if (k === this.population[i].trucks[j].city.length - 1) {
-                        break;
-                    }
-                    const truck = this.population[i].trucks[j];
-                    const currentCity = truck.city[k];
-                    const newCity = truck.city[k + 1];
-
-                    const [fromX, fromY] = [currentCity.x, currentCity.y];
-                    const [toX, toY] = [newCity.x, newCity.y];
-
-                    set.add(truck.city[k].name);
-                    pathSum += this._calcEuclitianDist(fromX, fromY, toX, toY);
-                }
-
-                
-                if (pathSum < this.bestSolution) {
-                    this.bestSolution = pathSum;
-                    this.bestPath = this.population[i].trucks[j];
-                }
-
-                if (pathSum > firstBest) {
-                    firstBest = i; 
-                }else {
-                    secondBest = i;
-                }
-                set.clear();
-            }            
+        
+        if (this.bestSolution) {
+            for(const x of this.bestPath!.trucks) {
+                console.log(`Caminhão ${x.name} had best path`);
+                console.log(x.city);
+            }
+            console.log(this.bestSolution);
         }
-
-        const father = this.population[firstBest];
-        const mother = this.population[secondBest];
-        return [father, mother];
     }
-    
-    
-    @prettyPrinter()
+
+    fitness(): [SolutionTable, SolutionTable] {
+        const scored = this.population.map((solution, index) => {
+            let pathSum = 0;
+            const visited = new Set<string>();
+
+            for (const truck of solution.trucks) {
+                for (let i = 0; i < truck.city.length - 1; i++) {
+                    const from = truck.city[i];
+                    const to = truck.city[i + 1];
+                    if (from.name !== "X") visited.add(from.name);
+                    pathSum += this._calcEuclidianDist(from.x, from.y, to.x, to.y);
+                }
+            }
+
+            if (visited.size !== this.citiesToVisit) pathSum = Infinity;
+            if (pathSum < this.bestSolution) {
+                this.bestSolution = pathSum;
+                this.bestPath = solution;
+            }
+
+            return { index, score: pathSum };
+        });
+
+        scored.sort((a, b) => a.score - b.score);
+        return [this.population[scored[0].index], this.population[scored[1].index]];
+    }
+
     crossover(father: SolutionTable, mother: SolutionTable) {
-        const fatherTruck = father.trucks[0];
-        const motherTruck = mother.trucks[0];
+        const getAllCities = (trucks: Truck[]) =>
+            trucks.flatMap(t => t.city.slice(1, -1));
 
-        const firstIndex = 1;
-        const lastIndex = fatherTruck.city.length - 1;
-        const midPoint = Math.ceil((firstIndex + lastIndex) / 2);
+        const shuffled = this._shuffle(getAllCities(father.trucks).concat(getAllCities(mother.trucks)));
+        const trucks = this._splitCitiesAmongTrucks(shuffled);
+        const child1 = new SolutionTable(trucks);
 
-        const fatherKPoints = [];
-        const motherKPoints = [];
-        for(let i = 1; i < father.trucks.length - 1; i++) {
-            if (i % 2 === 0) {
-                fatherKPoints.push(i);
-            } else {
-                motherKPoints.push(i);
-            }
-        }
+        const shuffled2 = this._shuffle(shuffled);
+        const child2 = new SolutionTable(this._splitCitiesAmongTrucks(shuffled2));
 
-        const fatherFirtHalf = fatherTruck.city.slice(firstIndex, midPoint);
-        const fatherSecondHalf = fatherTruck.city.slice(midPoint, lastIndex);
-
-        const motherFirstHalf = motherTruck.city.slice(firstIndex, midPoint);
-        const motherSecondHalf = motherTruck.city.slice(midPoint, lastIndex);
-
-
-        this.population = [
-            father,
-            mother,
-            new SolutionTable([new Truck([this.baseGraph, ...fatherFirtHalf, ...motherSecondHalf, this.baseGraph], "TruckC")]),
-            new SolutionTable([new Truck([this.baseGraph, ...fatherSecondHalf, ...motherFirstHalf, this.baseGraph], "TruckB")])
-        ];
+        this.population = [father, mother, child1, child2];
     }
-    
-    @prettyPrinter()
+
     mutate() {
-        
-        for(let i = 0; i < this.population.length; i++) {
-            const solution = this.population[i];
-            for(let j = 0; j < solution.trucks.length; j++) {
-                const truck = solution.trucks[j];
-                
-                const randomCityIndex = Math.floor(Math.random() * this.graph.length);
-                const choosenCity = this.graph[randomCityIndex];
-
-                const randomTruckCityindex = Math.floor(Math.random() * (truck.city.length - 2) + 1);
-                const temp = truck.city[randomTruckCityindex];
-                truck.city[randomTruckCityindex] = new City(choosenCity.x, choosenCity.y, choosenCity.name);
-
-                const swapIndex = this._findDuplicatesCitiesIndexes(truck, randomTruckCityindex);
-                if(swapIndex !== -1) {
-                    truck.city[swapIndex] = temp;
-                }
+        for (const solution of this.population) {
+            for (const truck of solution.trucks) {
+                const i = Math.floor(Math.random() * (truck.city.length - 2)) + 1;
+                const j = Math.floor(Math.random() * (truck.city.length - 2)) + 1;
+                if (i !== j) [truck.city[i], truck.city[j]] = [truck.city[j], truck.city[i]];
             }
         }
     }
-    
-    
-    
-    _calcEuclitianDist(fromX: number, fromY: number, toX: number, toY: number) {
-        return Math.sqrt(
-            ((toX - fromX) ** 2) + ((toY - fromY) ** 2)
-        )
+
+    _splitCitiesAmongTrucks(cities: City[]): Truck[] {
+        const trucks: Truck[] = [];
+        const chunkSize = this.maxCitiesPerTruck;
+
+        for (let i = 0; i < this.numTrucks; i++) {
+            const truckCities = cities.slice(i * chunkSize, (i + 1) * chunkSize);
+            trucks.push(new Truck([this.baseGraph, ...truckCities, this.baseGraph], `Truck${i + 1}`));
+        }
+
+        return trucks;
     }
 
-    // Need to change this later on;
-    _findDuplicatesCitiesIndexes(truck: Truck, randomTruckCityindex: number) {
-        const key = truck.city[randomTruckCityindex].name;
-        const index = truck.city.findIndex((x, index) => {
-            return x.name === key && index !== randomTruckCityindex;
-        })
-        
-        return index;
+    _calcEuclidianDist(fromX: number, fromY: number, toX: number, toY: number): number {
+        return Math.sqrt(((toX - fromX) ** 2) + ((toY - fromY) ** 2));
     }
 
     _shuffle<T>(array: T[]): T[] {
-        const arrayEmbaralhado = [...array];
-        for (let i = arrayEmbaralhado.length - 1; i > 0; i--) {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
-            [arrayEmbaralhado[i], arrayEmbaralhado[j]] = [arrayEmbaralhado[j], arrayEmbaralhado[i]];
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
         }
-        return arrayEmbaralhado;
+        return shuffled;
     }
-    
-    @prettyPrinter()
-    verifySolution() {}
-
-    // EDIT1: Maybe I dont need it!
-    // We need to do this because a truck can have the same path as another, ex:
-    // TRUCK A: X A B C X
-    // TRUCK B: X A B C X
-    // This way we're going to flip only the positions where it has the same value for optimazition.
-    // _compareTrucks(trucks: Truck[]){
-    //     for(const truck of trucks) {
-
-    //     }
-    // }
-
-    _getCitiesNotPassed(citiesPassed: City[]) {
-        return this.graph.filter(city => !citiesPassed.includes(city));
-    }
-
 }
 
-const x = new Solution();
-x.execute();
-
-
-
+const solver = new Solution();
+solver.execute();
 
 export default Solution;
